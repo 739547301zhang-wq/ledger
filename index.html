@@ -573,6 +573,7 @@
   }
   .type-dot.sub { background: var(--accent); }
   .type-dot.expense { background: var(--green); border: 1px solid var(--green); }
+  .type-dot.income { background: var(--blue); border: 1px solid var(--blue); }
   .type-dot.charge { background: transparent; border: 1.5px solid var(--accent); }
 
   .col-name .title {
@@ -613,6 +614,8 @@
     font-size: 15px;
     font-weight: 500;
   }
+  .col-amount.income-amount { color: var(--green); }
+  .col-amount.spend-amount { color: var(--accent); }
   .col-amount .native {
     display: block;
     font-size: 10px;
@@ -923,23 +926,23 @@
 
   <div class="stats">
     <div class="stat">
-      <div class="stat-label">Month total</div>
+      <div class="stat-label">Total income</div>
       <div class="stat-value"><span class="currency" id="curSym1">$</span><span id="statMonthTotal">0.00</span></div>
       <div class="stat-sub" id="statMonthSub">no activity</div>
     </div>
     <div class="stat">
-      <div class="stat-label">Subscriptions / mo</div>
+      <div class="stat-label">Spending</div>
       <div class="stat-value"><span class="currency" id="curSym2">$</span><span id="statSubMonthly">0.00</span></div>
       <div class="stat-sub" id="statSubSub">0 active</div>
     </div>
     <div class="stat">
-      <div class="stat-label">One-time expenses</div>
+      <div class="stat-label">Net / savings</div>
       <div class="stat-value"><span class="currency" id="curSym3">$</span><span id="statExpenses">0.00</span></div>
       <div class="stat-sub" id="statExpensesSub">0 items</div>
     </div>
     <div class="stat">
-      <div class="stat-label">Top category</div>
-      <div class="stat-value smaller" id="statCategory">—</div>
+      <div class="stat-label">Available money</div>
+      <div class="stat-value"><span class="currency" id="curSym4">$</span><span id="statCategory">0.00</span></div>
       <div class="stat-sub" id="statCategorySub">no spending</div>
     </div>
   </div>
@@ -947,6 +950,7 @@
   <div class="action-bar">
     <div class="action-bar-left">
       <button class="btn primary" id="btnAddExpense">＋ Expense</button>
+      <button class="btn secondary" id="btnAddIncome">＋ Income</button>
       <button class="btn secondary" id="btnAddSub">＋ Subscription</button>
       <input type="text" class="search" id="search" placeholder="Search…">
     </div>
@@ -968,6 +972,7 @@
   <div class="view-bar">
     <div class="view-tabs" id="viewTabs">
       <button class="tab active" data-view="all">All <span class="count" id="countAll">0</span></button>
+      <button class="tab" data-view="income">Income <span class="count" id="countIncome">0</span></button>
       <button class="tab" data-view="expense">Expenses <span class="count" id="countExpense">0</span></button>
       <button class="tab" data-view="subscription">Subscriptions <span class="count" id="countSub">0</span></button>
     </div>
@@ -1034,7 +1039,7 @@
         <input type="text" id="fPlatform" placeholder="e.g. DoorDash, Uber" autocomplete="off" list="platformList">
         <datalist id="platformList"></datalist>
       </div>
-      <div class="field">
+      <div class="field" id="fieldCategory">
         <label for="fCategory">Category</label>
         <input type="text" id="fCategory" placeholder="e.g. Food, Transport" autocomplete="off" list="categoryList">
         <datalist id="categoryList"></datalist>
@@ -1065,6 +1070,12 @@
         <label for="fDate"><span id="dateLabel">Date</span></label>
         <input type="date" id="fDate">
         <div class="hint" id="dateHint">Date this expense occurred.</div>
+      </div>
+
+      <div class="field full" id="fieldSource" style="display:none;">
+        <label for="fSource">Paid from</label>
+        <select id="fSource" class="field-select"></select>
+        <div class="hint" id="sourceHint">Shows income buckets from the same week.</div>
       </div>
 
       <div class="field full">
@@ -1110,6 +1121,7 @@
 const KEYS = {
   subs: 'ledger.subscriptions.v2',
   expenses: 'ledger.expenses.v1',
+  incomes: 'ledger.incomes.v1',
   history: 'ledger.chargeHistory.v1',
   settings: 'ledger.settings.v1',
   rates: 'ledger.rates.v1',
@@ -1160,6 +1172,7 @@ function currencySymbol(code) { return currencyMeta(code).symbol; }
 let state = {
   subscriptions: [],
   expenses: [],
+  incomes: [],
   chargeHistory: [],
   settings: {
     displayCurrency: 'USD',
@@ -1199,6 +1212,7 @@ function load() {
 
   try { state.subscriptions = JSON.parse(localStorage.getItem(KEYS.subs) || '[]'); } catch {}
   try { state.expenses = JSON.parse(localStorage.getItem(KEYS.expenses) || '[]'); } catch {}
+  try { state.incomes = JSON.parse(localStorage.getItem(KEYS.incomes) || '[]'); } catch {}
   try { state.chargeHistory = JSON.parse(localStorage.getItem(KEYS.history) || '[]'); } catch {}
   try {
     const s = JSON.parse(localStorage.getItem(KEYS.settings) || 'null');
@@ -1208,9 +1222,12 @@ function load() {
     const r = JSON.parse(localStorage.getItem(KEYS.rates) || 'null');
     if (r && r.rates) state.rates = r;
   } catch {}
+  migrateIncomeBuckets();
+  recalculateIncomeAvailability();
 }
 function saveSubsLocal()     { localStorage.setItem(KEYS.subs, JSON.stringify(state.subscriptions)); }
 function saveExpensesLocal() { localStorage.setItem(KEYS.expenses, JSON.stringify(state.expenses)); }
+function saveIncomesLocal()  { localStorage.setItem(KEYS.incomes, JSON.stringify(state.incomes)); }
 function saveHistoryLocal()  { localStorage.setItem(KEYS.history, JSON.stringify(state.chargeHistory)); }
 function saveSettingsLocal() { localStorage.setItem(KEYS.settings, JSON.stringify(state.settings)); }
 function saveRates()         { localStorage.setItem(KEYS.rates, JSON.stringify(state.rates)); }
@@ -1218,9 +1235,125 @@ function saveRates()         { localStorage.setItem(KEYS.rates, JSON.stringify(s
 // Public savers write the local cache AND push to the cloud (debounced).
 function saveSubs()     { saveSubsLocal();     scheduleSync(); }
 function saveExpenses() { saveExpensesLocal(); scheduleSync(); }
+function saveIncomes()  { saveIncomesLocal();  scheduleSync(); }
 function saveHistory()  { saveHistoryLocal();  scheduleSync(); }
 function saveSettings() { saveSettingsLocal(); scheduleSync(); }
-function saveAll() { saveSubsLocal(); saveExpensesLocal(); saveHistoryLocal(); saveSettingsLocal(); saveRates(); scheduleSync(); }
+function saveAll() { saveSubsLocal(); saveExpensesLocal(); saveIncomesLocal(); saveHistoryLocal(); saveSettingsLocal(); saveRates(); scheduleSync(); }
+
+function weekStartISO(iso) {
+  const d = parseISO(iso || todayISO());
+  d.setDate(d.getDate() - d.getDay());
+  return fmtISO(d);
+}
+
+function normalizeIncomeBucket(raw) {
+  const date = raw.date || raw.weekStartDate || todayISO();
+  const amount = Number(raw.amount != null ? raw.amount : raw.availableAmount) || 0;
+  return {
+    id: raw.id || ('inc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7)),
+    name: raw.name || raw.title || 'Income',
+    amount,
+    availableAmount: Number(raw.availableAmount != null ? raw.availableAmount : amount) || 0,
+    currency: raw.currency || state.settings.displayCurrency || 'USD',
+    date,
+    weekStartDate: raw.weekStartDate || weekStartISO(date),
+    notes: raw.notes || '',
+    createdAt: raw.createdAt || new Date().toISOString(),
+  };
+}
+
+function migrateIncomeBuckets() {
+  let touched = false;
+  if (!Array.isArray(state.incomes)) {
+    state.incomes = [];
+    touched = true;
+  }
+  const expenseBackedIncome = state.expenses.filter(e =>
+    e && (e.type === 'income' || e._kind === 'income' || e.kind === 'income'));
+  if (expenseBackedIncome.length) {
+    state.incomes.push(...expenseBackedIncome.map(normalizeIncomeBucket));
+    state.expenses = state.expenses.filter(e =>
+      !(e && (e.type === 'income' || e._kind === 'income' || e.kind === 'income')));
+    touched = true;
+  }
+  state.incomes = state.incomes.map(income => {
+    const normalized = normalizeIncomeBucket(income || {});
+    if (
+      normalized.id !== income.id ||
+      normalized.weekStartDate !== income.weekStartDate ||
+      normalized.availableAmount !== income.availableAmount ||
+      normalized.currency !== income.currency
+    ) touched = true;
+    return normalized;
+  });
+  state.expenses = state.expenses.map(exp => {
+    if (!('sourceId' in exp)) {
+      touched = true;
+      return { ...exp, sourceId: '' };
+    }
+    return exp;
+  });
+  state.subscriptions = state.subscriptions.map(sub => {
+    if (!('sourceId' in sub)) {
+      touched = true;
+      return { ...sub, sourceId: '' };
+    }
+    return sub;
+  });
+  state.chargeHistory = state.chargeHistory.map(ch => {
+    if (!('sourceId' in ch)) {
+      touched = true;
+      return { ...ch, sourceId: '' };
+    }
+    return ch;
+  });
+  if (touched) {
+    saveIncomesLocal();
+    saveExpensesLocal();
+    saveSubsLocal();
+    saveHistoryLocal();
+  }
+}
+
+function sourceById(id) {
+  return state.incomes.find(i => i.id === id) || null;
+}
+
+function sourceName(id) {
+  const source = sourceById(id);
+  return source ? source.name : '';
+}
+
+function assignedSpendForSource(sourceId) {
+  const target = sourceById(sourceId);
+  if (!target) return 0;
+  const cur = target.currency || 'USD';
+  const expenseSpend = state.expenses.reduce((sum, exp) =>
+    exp.sourceId === sourceId ? sum + convert(exp.amount, exp.currency || 'USD', cur) : sum, 0);
+  const chargeSpend = state.chargeHistory.reduce((sum, ch) =>
+    ch.sourceId === sourceId ? sum + convert(ch.amount, ch.currency || 'USD', cur) : sum, 0);
+  return expenseSpend + chargeSpend;
+}
+
+function recalculateIncomeAvailability() {
+  state.incomes = state.incomes.map(income => {
+    const amount = Number(income.amount) || 0;
+    return {
+      ...normalizeIncomeBucket(income),
+      amount,
+      availableAmount: amount - assignedSpendForSource(income.id),
+    };
+  });
+}
+
+function saveMoneyState() {
+  recalculateIncomeAvailability();
+  saveIncomesLocal();
+  saveExpensesLocal();
+  saveSubsLocal();
+  saveHistoryLocal();
+  scheduleSync();
+}
 
 /* ============================================================
    CLOUD SYNC  (Cloudflare Worker + KV)
@@ -1250,16 +1383,20 @@ function serializeState() {
     settings: state.settings,
     subscriptions: state.subscriptions,
     expenses: state.expenses,
+    incomes: state.incomes,
     chargeHistory: state.chargeHistory,
   };
 }
 function applyBlob(blob) {
   if (!blob) return;
+  if (blob.settings) state.settings = { ...state.settings, ...blob.settings };
   if (Array.isArray(blob.subscriptions)) state.subscriptions = blob.subscriptions.map(s => ({ ...s, currency: s.currency || 'USD' }));
   if (Array.isArray(blob.expenses)) state.expenses = blob.expenses;
+  if (Array.isArray(blob.incomes)) state.incomes = blob.incomes.map(normalizeIncomeBucket);
   if (Array.isArray(blob.chargeHistory)) state.chargeHistory = blob.chargeHistory;
-  if (blob.settings) state.settings = { ...state.settings, ...blob.settings };
-  saveSubsLocal(); saveExpensesLocal(); saveHistoryLocal(); saveSettingsLocal();
+  migrateIncomeBuckets();
+  recalculateIncomeAvailability();
+  saveSubsLocal(); saveExpensesLocal(); saveIncomesLocal(); saveHistoryLocal(); saveSettingsLocal();
   if (blob.updatedAt) setLocalStamp(blob.updatedAt);
 }
 
@@ -1316,7 +1453,7 @@ async function pullRemote() {
       }
     } else {
       // remote empty — seed it from whatever this device has
-      if (state.subscriptions.length || state.expenses.length || state.chargeHistory.length) {
+      if (state.subscriptions.length || state.expenses.length || state.incomes.length || state.chargeHistory.length) {
         await pushRemote();
       }
     }
@@ -1486,12 +1623,13 @@ function autoAdvance() {
         currency: sub.currency || 'USD',
         date: sub.nextCharge,
         cycle: sub.cycle,
+        sourceId: sub.sourceId || '',
       });
       sub.nextCharge = advanceDate(sub.nextCharge, sub.cycle);
       touched = true;
     }
   });
-  if (touched) { saveSubs(); saveHistory(); }
+  if (touched) saveMoneyState();
 }
 
 /* ============================================================
@@ -1569,21 +1707,28 @@ function getMonthItems(y, m) {
   const today = todayISO();
   const items = [];
 
-  // 1. Expenses dated in this month
+  // 1. Income buckets dated in this month
+  state.incomes.forEach(income => {
+    if (isInMonth(income.date, y, m)) {
+      items.push({ ...income, _kind: 'income', _date: income.date, _amount: income.amount });
+    }
+  });
+
+  // 2. Expenses dated in this month
   state.expenses.forEach(e => {
     if (isInMonth(e.date, y, m)) {
       items.push({ ...e, _kind: 'expense', _date: e.date, _amount: e.amount });
     }
   });
 
-  // 2. Logged subscription charges in this month
+  // 3. Logged subscription charges in this month
   state.chargeHistory.forEach(h => {
     if (isInMonth(h.date, y, m)) {
       items.push({ ...h, _kind: 'charge', _date: h.date, _amount: h.amount });
     }
   });
 
-  // 3. Subscriptions whose NEXT charge falls in this month (i.e. upcoming this month)
+  // 4. Subscriptions whose NEXT charge falls in this month (i.e. upcoming this month)
   //    Only meaningful for current or future months.
   const isCurrentOrFuture = (y > currentYM().y) || (y === currentYM().y && m >= currentYM().m);
   if (isCurrentOrFuture) {
@@ -1607,6 +1752,7 @@ function getMonthItems(y, m) {
    ============================================================ */
 function render() {
   autoAdvance();
+  recalculateIncomeAvailability();
   renderMonthNav();
   renderStats();
   renderTabs();
@@ -1641,60 +1787,43 @@ function renderStats() {
   const { y, m } = state.viewMonth;
   const target = state.settings.displayCurrency;
   const sym = currencySymbol(target);
-  ['curSym1','curSym2','curSym3'].forEach(id => document.getElementById(id).textContent = sym);
+  ['curSym1','curSym2','curSym3','curSym4'].forEach(id => document.getElementById(id).textContent = sym);
 
   const items = getMonthItems(y, m);
-
-  // Month total = all items (in display currency)
-  const monthTotal = items.reduce((s, i) =>
+  const incomeItems = items.filter(i => i._kind === 'income');
+  const spendItems = items.filter(i => i._kind === 'expense' || i._kind === 'charge' || i._kind === 'subscription');
+  const incomeTotal = incomeItems.reduce((s, i) =>
     s + convert(i._amount, i.currency || 'USD', target), 0);
-
-  // Subscriptions monthly equiv (only active subs, regardless of viewed month)
-  const subMonthly = state.subscriptions.reduce((s, sub) =>
-    s + convert(monthlyEquivalent(sub), sub.currency || 'USD', target), 0);
-
-  // One-time expenses this month
-  const expenseItems = items.filter(i => i._kind === 'expense');
-  const expenseTotal = expenseItems.reduce((s, i) =>
+  const spendingTotal = spendItems.reduce((s, i) =>
     s + convert(i._amount, i.currency || 'USD', target), 0);
+  const netTotal = incomeTotal - spendingTotal;
+  const availableTotal = state.incomes
+    .filter(i => isInMonth(i.date, y, m))
+    .reduce((s, i) => s + convert(i.availableAmount, i.currency || 'USD', target), 0);
 
-  // Top category in this month (across everything)
-  const byCat = {};
-  items.forEach(i => {
-    const c = (i.category || 'Uncategorized').trim() || 'Uncategorized';
-    byCat[c] = (byCat[c] || 0) + convert(i._amount, i.currency || 'USD', target);
-  });
-  const sorted = Object.entries(byCat).sort((a,b) => b[1] - a[1]);
-  const topCat = sorted[0];
-
-  document.getElementById('statMonthTotal').textContent = formatMoney(monthTotal);
+  document.getElementById('statMonthTotal').textContent = formatMoney(incomeTotal);
   document.getElementById('statMonthSub').textContent =
-    items.length === 0 ? 'no activity yet' :
-    `across ${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+    `${incomeItems.length} ${incomeItems.length === 1 ? 'bucket' : 'buckets'}`;
 
-  document.getElementById('statSubMonthly').textContent = formatMoney(subMonthly);
+  document.getElementById('statSubMonthly').textContent = formatMoney(spendingTotal);
   document.getElementById('statSubSub').textContent =
-    `${state.subscriptions.length} active`;
+    `${spendItems.length} ${spendItems.length === 1 ? 'item' : 'items'}`;
 
-  document.getElementById('statExpenses').textContent = formatMoney(expenseTotal);
+  document.getElementById('statExpenses').textContent = `${netTotal < 0 ? '-' : ''}${formatMoney(Math.abs(netTotal))}`;
   document.getElementById('statExpensesSub').textContent =
-    `${expenseItems.length} ${expenseItems.length === 1 ? 'item' : 'items'}`;
+    netTotal >= 0 ? 'saved this month' : 'over income';
 
-  if (topCat) {
-    document.getElementById('statCategory').textContent = topCat[0];
-    const pct = monthTotal > 0 ? Math.round((topCat[1] / monthTotal) * 100) : 0;
-    document.getElementById('statCategorySub').textContent =
-      `${sym}${formatMoney(topCat[1])} · ${pct}% of month`;
-  } else {
-    document.getElementById('statCategory').textContent = '—';
-    document.getElementById('statCategorySub').textContent = 'no spending';
-  }
+  document.getElementById('statCategory').textContent =
+    `${availableTotal < 0 ? '-' : ''}${formatMoney(Math.abs(availableTotal))}`;
+  document.getElementById('statCategorySub').textContent =
+    'remaining in month buckets';
 }
 
 function renderTabs() {
   const { y, m } = state.viewMonth;
   const items = getMonthItems(y, m);
   document.getElementById('countAll').textContent = items.length;
+  document.getElementById('countIncome').textContent = items.filter(i => i._kind === 'income').length;
   document.getElementById('countExpense').textContent = items.filter(i => i._kind === 'expense').length;
   // Subscriptions tab is a registry — count all active subs, not month-filtered.
   document.getElementById('countSub').textContent = state.subscriptions.length;
@@ -1735,7 +1864,8 @@ function getVisibleItems({ registrySubscriptions = false } = {}) {
     items = items.filter(i =>
       (i.name||'').toLowerCase().includes(q) ||
       (i.platform||'').toLowerCase().includes(q) ||
-      (i.category||'').toLowerCase().includes(q)
+      (i.category||'').toLowerCase().includes(q) ||
+      sourceName(i.sourceId).toLowerCase().includes(q)
     );
   }
 
@@ -1896,6 +2026,18 @@ function renderEmptyState({ view, isCurrentMonth, y, m }) {
       </div>`;
   }
 
+  if (view === 'income') {
+    return `
+      <div class="empty">
+        <div class="ornament">§</div>
+        <h3>No income buckets in ${monthStr}.</h3>
+        <p>Create weekly buckets for paychecks, allowance, freelance work, or any money you want to spend from.</p>
+        <div class="empty-actions">
+          <button class="btn secondary" onclick="openAddIncome()">＋ Add income</button>
+        </div>
+      </div>`;
+  }
+
   if (view === 'expense') {
     return `
       <div class="empty">
@@ -1931,6 +2073,7 @@ function renderEmptyState({ view, isCurrentMonth, y, m }) {
       ${isCurrentMonth ? `
         <div class="empty-actions">
           <button class="btn primary" onclick="openAddExpense()">＋ Add expense</button>
+          <button class="btn secondary" onclick="openAddIncome()">＋ Add income</button>
           <button class="btn secondary" onclick="openAddSub()">＋ Add subscription</button>
         </div>` : ''}
       ${hint}
@@ -1948,10 +2091,12 @@ function switchTab(view) {
 function renderRow(item) {
   const target = state.settings.displayCurrency;
   const kind = item._kind;
-  const dotClass = kind === 'subscription' ? 'sub' : kind === 'charge' ? 'charge' : 'expense';
+  const dotClass = kind === 'subscription' ? 'sub' : kind === 'charge' ? 'charge' : kind === 'income' ? 'income' : 'expense';
 
   let meta;
-  if (kind === 'subscription') {
+  if (kind === 'income') {
+    meta = `Income bucket · available ${currencySymbol(target)}${formatMoney(convert(item.availableAmount, item.currency || 'USD', target))}`;
+  } else if (kind === 'subscription') {
     const d = daysUntil(item._date);
     meta = d === 0 ? 'Due today' : d === 1 ? 'Due tomorrow' : `Upcoming in ${d}d`;
   } else if (kind === 'charge') {
@@ -1959,6 +2104,8 @@ function renderRow(item) {
   } else {
     meta = 'Expense';
   }
+  const source = sourceName(item.sourceId);
+  if (source && kind !== 'income') meta += ` · from ${source}`;
 
   const dInfo = (() => {
     const d = daysUntil(item._date);
@@ -1975,10 +2122,12 @@ function renderRow(item) {
     { monthly:'/mo', yearly:'/yr', weekly:'/wk', quarterly:'/qtr' }[item.cycle] : '';
 
   const isFuture = kind === 'subscription';
-  const editId = kind === 'expense' ? item.id : (kind === 'subscription' ? item.id : '');
-  const editType = kind === 'expense' ? 'expense' : (kind === 'subscription' ? 'subscription' : '');
+  const editId = kind === 'expense' ? item.id : (kind === 'subscription' ? item.id : (kind === 'income' ? item.id : ''));
+  const editType = kind === 'expense' ? 'expense' : (kind === 'subscription' ? 'subscription' : (kind === 'income' ? 'income' : ''));
   const canEdit = !!editType;
   const canDelete = kind === 'charge' ? true : canEdit;
+  const sign = kind === 'income' ? '+' : '-';
+  const signedClass = kind === 'income' ? 'income-amount' : 'spend-amount';
 
   return `
     <div class="row ${dInfo.dueSoon ? 'due-soon' : ''} ${isFuture ? 'future-charge' : ''}" data-id="${item.id}">
@@ -1989,8 +2138,8 @@ function renderRow(item) {
       </div>
       <div class="col-platform">${escapeHtml(item.platform || '—')}</div>
       <div class="col-category">${item.category ? `<span class="tag">${escapeHtml(item.category)}</span>` : '—'}</div>
-      <div class="col-amount">
-        ${currencySymbol(target)}${formatMoney(convert(item._amount, item.currency||'USD', target))}${cycleShort ? `<span class="cycle">${cycleShort}</span>` : ''}
+      <div class="col-amount ${signedClass}">
+        ${sign}${currencySymbol(target)}${formatMoney(convert(item._amount, item.currency||'USD', target))}${cycleShort ? `<span class="cycle">${cycleShort}</span>` : ''}
         ${(item.currency && item.currency !== target) ? `<span class="native">${currencySymbol(item.currency)}${formatMoney(item._amount)} ${item.currency}</span>` : ''}
       </div>
       <div class="col-date ${dInfo.dueSoon ? 'soon' : ''}">
@@ -2007,7 +2156,7 @@ function renderRow(item) {
 function renderDatalists() {
   const platforms = new Set();
   const categories = new Set();
-  [...state.subscriptions, ...state.expenses, ...state.chargeHistory].forEach(i => {
+  [...state.subscriptions, ...state.expenses, ...state.incomes, ...state.chargeHistory].forEach(i => {
     if (i.platform) platforms.add(i.platform);
     if (i.category) categories.add(i.category);
   });
@@ -2039,29 +2188,56 @@ function monthlyEquivalent(sub) {
   }
 }
 
+function incomeBucketsForWeek(date) {
+  const weekStart = weekStartISO(date || todayISO());
+  return state.incomes.filter(i => i.weekStartDate === weekStart);
+}
+
+function renderSourceOptions(selectedId, date) {
+  const sel = document.getElementById('fSource');
+  const buckets = incomeBucketsForWeek(date);
+  let options = '<option value="">No bucket</option>';
+  options += buckets.map(bucket => {
+    const target = state.settings.displayCurrency;
+    const available = convert(bucket.availableAmount, bucket.currency || 'USD', target);
+    return `<option value="${escapeHtml(bucket.id)}">${escapeHtml(bucket.name)} · ${currencySymbol(target)}${formatMoney(available)} available</option>`;
+  }).join('');
+  sel.innerHTML = options;
+  sel.value = selectedId && buckets.some(b => b.id === selectedId) ? selectedId : '';
+  document.getElementById('sourceHint').textContent =
+    buckets.length ? 'Shows income buckets from the same week.' : 'No income buckets found for this week.';
+}
+
 /* ============================================================
    MODAL: ADD / EDIT
    ============================================================ */
 function openAddExpense() { openModal('expense', null); }
+function openAddIncome()  { openModal('income', null); }
 function openAddSub()     { openModal('subscription', null); }
 function openEdit(type, id) { openModal(type, id); }
 
 function openModal(type, id) {
   state.editing = { type, id };
   const isSub = type === 'subscription';
+  const isIncome = type === 'income';
 
   document.getElementById('modalTitle').textContent =
-    (id ? 'Edit ' : 'New ') + (isSub ? 'subscription' : 'expense');
+    (id ? 'Edit ' : 'New ') + (isIncome ? 'income bucket' : (isSub ? 'subscription' : 'expense'));
   document.getElementById('modalSub').textContent =
-    isSub ? 'Recurring charge on a service' : 'One-time spend';
+    isIncome ? 'Weekly money bucket' : (isSub ? 'Recurring charge on a service' : 'One-time spend');
 
   document.getElementById('platformLabel').textContent = isSub ? 'Platform / Vendor' : 'Merchant';
-  document.getElementById('amountLabel').textContent = isSub ? 'Cost per cycle' : 'Amount';
-  document.getElementById('dateLabel').textContent = isSub ? 'Next charge date' : 'Date';
-  document.getElementById('dateHint').textContent = isSub
+  document.getElementById('amountLabel').textContent = isIncome ? 'Original amount' : (isSub ? 'Cost per cycle' : 'Amount');
+  document.getElementById('dateLabel').textContent = isIncome ? 'Week date' : (isSub ? 'Next charge date' : 'Date');
+  document.getElementById('dateHint').textContent = isIncome
+    ? 'Pick any day in the week this money bucket belongs to.'
+    : isSub
     ? 'The next time you\u2019ll be billed. Use today if it bills today; pick a future date if the next charge is later.'
     : 'When this expense occurred.';
   document.getElementById('fieldCycle').style.display = isSub ? 'flex' : 'none';
+  document.getElementById('fieldSource').style.display = isIncome ? 'none' : 'flex';
+  document.getElementById('fieldPlatform').style.display = isIncome ? 'none' : 'flex';
+  document.getElementById('fieldCategory').style.display = isIncome ? 'none' : 'flex';
 
   document.getElementById('btnDelete').style.display = id ? 'inline-block' : 'none';
 
@@ -2071,7 +2247,7 @@ function openModal(type, id) {
     `<option value="${c.code}">${c.code} (${c.symbol})</option>`).join('');
 
   if (id) {
-    const item = (isSub ? state.subscriptions : state.expenses).find(x => x.id === id);
+    const item = (isIncome ? state.incomes : (isSub ? state.subscriptions : state.expenses)).find(x => x.id === id);
     if (!item) return;
     document.getElementById('fName').value = item.name || '';
     document.getElementById('fPlatform').value = item.platform || '';
@@ -2081,6 +2257,7 @@ function openModal(type, id) {
     if (isSub) document.getElementById('fCycle').value = item.cycle || 'monthly';
     document.getElementById('fDate').value = isSub ? item.nextCharge : item.date;
     document.getElementById('fNotes').value = item.notes || '';
+    if (!isIncome) renderSourceOptions(item.sourceId || '', isSub ? item.nextCharge : item.date);
   } else {
     document.getElementById('fName').value = '';
     document.getElementById('fPlatform').value = '';
@@ -2090,6 +2267,7 @@ function openModal(type, id) {
     document.getElementById('fCycle').value = 'monthly';
     document.getElementById('fDate').value = todayISO();
     document.getElementById('fNotes').value = '';
+    if (!isIncome) renderSourceOptions('', todayISO());
   }
 
   document.getElementById('modal').classList.add('open');
@@ -2105,6 +2283,7 @@ function saveItem() {
   const { type, id } = state.editing || {};
   if (!type) return;
   const isSub = type === 'subscription';
+  const isIncome = type === 'income';
 
   const name = document.getElementById('fName').value.trim();
   const platform = document.getElementById('fPlatform').value.trim();
@@ -2114,25 +2293,48 @@ function saveItem() {
   const cycle = document.getElementById('fCycle').value;
   const date = document.getElementById('fDate').value;
   const notes = document.getElementById('fNotes').value.trim();
+  const sourceId = isIncome ? '' : document.getElementById('fSource').value;
 
   if (!name) { toast('Title is required', 'warn'); return; }
   if (isNaN(amount) || amount < 0) { toast('Enter a valid amount', 'warn'); return; }
   if (!date) { toast('Pick a date', 'warn'); return; }
 
-  if (isSub) {
+  if (isIncome) {
+    if (id) {
+      const income = state.incomes.find(x => x.id === id);
+      Object.assign(income, { name, amount, currency, date, weekStartDate: weekStartISO(date), notes });
+      recalculateIncomeAvailability();
+      saveIncomes();
+      toast('Income updated');
+    } else {
+      state.incomes.push({
+        id: 'inc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+        name, amount, availableAmount: amount, currency, date,
+        weekStartDate: weekStartISO(date), notes,
+        createdAt: new Date().toISOString(),
+      });
+      recalculateIncomeAvailability();
+      saveIncomes();
+      toast('Income added');
+    }
+    const d = parseISO(date);
+    if (d.getFullYear() !== state.viewMonth.y || d.getMonth() !== state.viewMonth.m) {
+      state.viewMonth = { y: d.getFullYear(), m: d.getMonth() };
+    }
+  } else if (isSub) {
     if (id) {
       const sub = state.subscriptions.find(x => x.id === id);
-      Object.assign(sub, { name, platform, category, cost: amount, currency, cycle, nextCharge: date, notes });
-      saveSubs();
+      Object.assign(sub, { name, platform, category, cost: amount, currency, cycle, nextCharge: date, sourceId, notes });
+      saveMoneyState();
       toast('Subscription updated');
     } else {
       state.subscriptions.push({
         id: 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
         name, platform, category, cost: amount, currency, cycle,
-        nextCharge: date, notes,
+        nextCharge: date, sourceId, notes,
         createdAt: new Date().toISOString(),
       });
-      saveSubs();
+      saveMoneyState();
       // If the next charge isn't in the currently-viewed month, tell the user where to find it
       const d = parseISO(date);
       const inViewMonth = (d.getFullYear() === state.viewMonth.y && d.getMonth() === state.viewMonth.m);
@@ -2145,15 +2347,15 @@ function saveItem() {
   } else {
     if (id) {
       const exp = state.expenses.find(x => x.id === id);
-      Object.assign(exp, { name, platform, category, amount, currency, date, notes });
+      Object.assign(exp, { name, platform, category, amount, currency, date, sourceId, notes });
     } else {
       state.expenses.push({
         id: 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-        name, platform, category, amount, currency, date, notes,
+        name, platform, category, amount, currency, date, sourceId, notes,
         createdAt: new Date().toISOString(),
       });
     }
-    saveExpenses();
+    saveMoneyState();
     toast(id ? 'Expense updated' : 'Expense added');
     // Auto-jump to month of the expense if not already there
     const d = parseISO(date);
@@ -2189,8 +2391,21 @@ function confirmDeleteAny(kind, id) {
     label = e.name;
     showConfirm('Delete expense?', `Remove <strong>${escapeHtml(label)}</strong>?`, () => {
       state.expenses = state.expenses.filter(x => x.id !== id);
-      saveExpenses(); closeModal(); render(); toast('Deleted');
+      saveMoneyState(); closeModal(); render(); toast('Deleted');
     });
+  } else if (kind === 'income') {
+    const i = state.incomes.find(x => x.id === id);
+    if (!i) return;
+    label = i.name;
+    showConfirm('Delete income bucket?',
+      `Remove <strong>${escapeHtml(label)}</strong>? Assigned expenses will remain, but their source label will be cleared.`,
+      () => {
+        state.expenses.forEach(exp => { if (exp.sourceId === id) exp.sourceId = ''; });
+        state.subscriptions.forEach(sub => { if (sub.sourceId === id) sub.sourceId = ''; });
+        state.chargeHistory.forEach(ch => { if (ch.sourceId === id) ch.sourceId = ''; });
+        state.incomes = state.incomes.filter(x => x.id !== id);
+        saveMoneyState(); closeModal(); render(); toast('Deleted');
+      });
   } else if (kind === 'subscription') {
     const s = state.subscriptions.find(x => x.id === id);
     if (!s) return;
@@ -2199,7 +2414,7 @@ function confirmDeleteAny(kind, id) {
       `Remove <strong>${escapeHtml(label)}</strong>? Past charges in history will remain.`,
       () => {
         state.subscriptions = state.subscriptions.filter(x => x.id !== id);
-        saveSubs(); closeModal(); render(); toast('Deleted');
+        saveMoneyState(); closeModal(); render(); toast('Deleted');
       });
   } else if (kind === 'charge') {
     const c = state.chargeHistory.find(x => x.id === id);
@@ -2209,7 +2424,7 @@ function confirmDeleteAny(kind, id) {
       `Remove the <strong>${escapeHtml(label)}</strong> charge on ${formatPretty(c.date)} from history?`,
       () => {
         state.chargeHistory = state.chargeHistory.filter(x => x.id !== id);
-        saveHistory(); render(); toast('Removed');
+        saveMoneyState(); render(); toast('Removed');
       });
   }
 }
@@ -2236,6 +2451,7 @@ function exportData() {
     settings: state.settings,
     subscriptions: state.subscriptions,
     expenses: state.expenses,
+    incomes: state.incomes,
     chargeHistory: state.chargeHistory,
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2254,23 +2470,31 @@ function importData(file) {
       const data = JSON.parse(e.target.result);
       const subs = Array.isArray(data.subscriptions) ? data.subscriptions
                  : Array.isArray(data.items) ? data.items : null; // backward-compat with v1 export
-      if (!subs && !Array.isArray(data.expenses)) throw new Error('Invalid file');
+      const incomes = Array.isArray(data.incomes) ? data.incomes
+                   : Array.isArray(data.income) ? data.income
+                   : Array.isArray(data.incomeSources) ? data.incomeSources : null;
+      if (!subs && !Array.isArray(data.expenses) && !incomes) throw new Error('Invalid file');
       showConfirm('Import data?',
         `Replace your current data with this backup? <br><br>
          <strong>${(subs||[]).length}</strong> subscription(s), 
          <strong>${(data.expenses||[]).length}</strong> expense(s), 
+         <strong>${(incomes||[]).length}</strong> income bucket(s),
          <strong>${(data.chargeHistory||[]).length}</strong> history record(s).`,
         () => {
           if (subs) {
-            state.subscriptions = subs.map(s => ({ ...s, currency: s.currency || 'USD' }));
+            state.subscriptions = subs.map(s => ({ ...s, currency: s.currency || 'USD', sourceId: s.sourceId || '' }));
             saveSubs();
           }
           if (Array.isArray(data.expenses)) {
-            state.expenses = data.expenses;
+            state.expenses = data.expenses.map(e => ({ ...e, sourceId: e.sourceId || '' }));
             saveExpenses();
           }
+          if (incomes) {
+            state.incomes = incomes.map(normalizeIncomeBucket);
+            saveIncomes();
+          }
           if (Array.isArray(data.chargeHistory)) {
-            state.chargeHistory = data.chargeHistory;
+            state.chargeHistory = data.chargeHistory.map(h => ({ ...h, sourceId: h.sourceId || '' }));
             saveHistory();
           }
           if (data.settings) {
@@ -2284,6 +2508,9 @@ function importData(file) {
             saveSettings();
           }
           populateDisplayCurrency();
+          migrateIncomeBuckets();
+          recalculateIncomeAvailability();
+          saveIncomesLocal();
           render();
           toast('Imported');
         });
@@ -2309,6 +2536,7 @@ function populateDisplayCurrency() {
    ============================================================ */
 function bindEvents() {
   document.getElementById('btnAddExpense').addEventListener('click', openAddExpense);
+  document.getElementById('btnAddIncome').addEventListener('click', openAddIncome);
   document.getElementById('btnAddSub').addEventListener('click', openAddSub);
   document.getElementById('btnSave').addEventListener('click', saveItem);
   document.getElementById('btnCancel').addEventListener('click', closeModal);
@@ -2327,6 +2555,10 @@ function bindEvents() {
   document.getElementById('confirmOk').addEventListener('click', () => {
     if (confirmCallback) confirmCallback();
     closeConfirm();
+  });
+  document.getElementById('fDate').addEventListener('change', () => {
+    if (!state.editing || state.editing.type === 'income') return;
+    renderSourceOptions(document.getElementById('fSource').value, document.getElementById('fDate').value);
   });
 
   document.getElementById('search').addEventListener('input', (e) => {
@@ -2421,12 +2653,13 @@ function bindEvents() {
 
   document.getElementById('resetAll').addEventListener('click', (e) => {
     e.preventDefault();
-    const total = state.subscriptions.length + state.expenses.length + state.chargeHistory.length;
+    const total = state.subscriptions.length + state.expenses.length + state.incomes.length + state.chargeHistory.length;
     showConfirm('Erase all data?',
       `This will permanently delete all <strong>${total}</strong> record(s) (subscriptions, expenses, history). Export first if you want a backup.`,
       () => {
         state.subscriptions = [];
         state.expenses = [];
+        state.incomes = [];
         state.chargeHistory = [];
         saveAll();
         render();
