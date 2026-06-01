@@ -344,11 +344,17 @@
   }
 
   /* ---------- View tabs ---------- */
+  .view-bar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--ink);
+  }
   .view-tabs {
     display: flex;
     gap: 0;
     margin-bottom: 0;
-    border-bottom: 1px solid var(--ink);
   }
   .tab {
     font-family: var(--mono);
@@ -381,6 +387,148 @@
     background: var(--accent);
     color: var(--bg);
   }
+  .view-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-bottom: 7px;
+  }
+  .view-mode {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--ink-muted);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .view-mode:hover { color: var(--ink); border-color: var(--ink-soft); }
+  .view-mode.active {
+    color: var(--bg);
+    background: var(--ink);
+    border-color: var(--ink);
+  }
+
+  /* ---------- Calendar ---------- */
+  .calendar-view {
+    display: none;
+    margin-top: 18px;
+  }
+  .calendar-view.active { display: block; }
+  .calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    border: 1px solid var(--rule);
+    border-bottom: none;
+    background: var(--bg-elevated);
+  }
+  .calendar-weekday {
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    border-right: 1px solid var(--rule-soft);
+  }
+  .calendar-weekday:last-child { border-right: none; }
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    border-left: 1px solid var(--rule);
+    border-top: 1px solid var(--rule);
+  }
+  .calendar-day {
+    min-height: 112px;
+    padding: 10px;
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    text-align: left;
+    position: relative;
+    transition: background .12s, box-shadow .12s;
+  }
+  .calendar-day:hover,
+  .calendar-day.open {
+    background: var(--bg-elevated);
+    box-shadow: inset 0 0 0 1px var(--ink);
+  }
+  .calendar-day.empty {
+    cursor: default;
+    background: rgba(251,247,240,.35);
+    box-shadow: none;
+  }
+  .calendar-date {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .calendar-count {
+    position: absolute;
+    top: 11px;
+    right: 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .08em;
+    color: var(--ink-muted);
+  }
+  .calendar-total {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    max-width: calc(100% - 20px);
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+  .calendar-total.positive { color: var(--green); }
+  .calendar-total.negative { color: var(--accent); }
+  .calendar-total.zero { color: var(--ink-muted); }
+  .calendar-details {
+    display: none;
+    margin-top: 16px;
+    border: 1px solid var(--rule);
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .calendar-details.open { display: block; }
+  .calendar-details-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .calendar-details-title {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-style: italic;
+    line-height: 1.1;
+  }
+  .calendar-close {
+    border: none;
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    padding: 2px 6px;
+  }
+  .calendar-close:hover { color: var(--accent); }
 
   /* ---------- Table ---------- */
   .table-head {
@@ -734,6 +882,14 @@
     .amount-row { grid-template-columns: 1fr 100px; }
     .month-label { font-size: 22px; min-width: 200px; }
     .month-badge, .month-nav button.today-btn { position: static; transform: none; margin-left: auto; display: block; }
+    .view-bar { align-items: stretch; flex-direction: column; gap: 8px; border-bottom: none; }
+    .view-tabs { overflow-x: auto; border-bottom: 1px solid var(--ink); }
+    .view-toggle { padding-bottom: 0; justify-content: flex-start; }
+    .calendar-day { min-height: 88px; padding: 8px; }
+    .calendar-weekday { padding: 8px 6px; text-align: center; }
+    .calendar-date { top: 8px; left: 8px; }
+    .calendar-count { display: none; }
+    .calendar-total { right: 8px; bottom: 8px; font-size: 11px; }
   }
 </style>
 </head>
@@ -809,13 +965,32 @@
     </div>
   </div>
 
-  <div class="view-tabs" id="viewTabs">
-    <button class="tab active" data-view="all">All <span class="count" id="countAll">0</span></button>
-    <button class="tab" data-view="expense">Expenses <span class="count" id="countExpense">0</span></button>
-    <button class="tab" data-view="subscription">Subscriptions <span class="count" id="countSub">0</span></button>
+  <div class="view-bar">
+    <div class="view-tabs" id="viewTabs">
+      <button class="tab active" data-view="all">All <span class="count" id="countAll">0</span></button>
+      <button class="tab" data-view="expense">Expenses <span class="count" id="countExpense">0</span></button>
+      <button class="tab" data-view="subscription">Subscriptions <span class="count" id="countSub">0</span></button>
+    </div>
+    <div class="view-toggle" id="viewToggle" aria-label="View mode">
+      <button class="view-mode active" data-mode="list" type="button">List</button>
+      <button class="view-mode" data-mode="calendar" type="button">Calendar</button>
+    </div>
   </div>
 
   <div id="list"></div>
+  <div class="calendar-view" id="calendarView">
+    <div class="calendar-weekdays" aria-hidden="true">
+      <div class="calendar-weekday">Sun</div>
+      <div class="calendar-weekday">Mon</div>
+      <div class="calendar-weekday">Tue</div>
+      <div class="calendar-weekday">Wed</div>
+      <div class="calendar-weekday">Thu</div>
+      <div class="calendar-weekday">Fri</div>
+      <div class="calendar-weekday">Sat</div>
+    </div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+    <div class="calendar-details" id="calendarDetails"></div>
+  </div>
 
   <footer class="foot">
     <span id="ratesInfo">Loading rates…</span>
@@ -994,6 +1169,8 @@ let state = {
   rates: FALLBACK_RATES,
   // ephemeral
   viewMonth: null, // {y, m}
+  viewMode: 'list',
+  calendarOpenDate: null,
   search: '',
   editing: null, // {type, id}
 };
@@ -1433,7 +1610,7 @@ function render() {
   renderMonthNav();
   renderStats();
   renderTabs();
-  renderList();
+  renderMainView();
   renderDatalists();
 }
 
@@ -1527,14 +1704,12 @@ function renderTabs() {
   });
 }
 
-function renderList() {
+function getVisibleItems({ registrySubscriptions = false } = {}) {
   const { y, m } = state.viewMonth;
   const view = state.settings.view;
-  const isSubView = view === 'subscription';
-  const isCurrentMonth = (y === currentYM().y && m === currentYM().m);
 
   let items;
-  if (isSubView) {
+  if (view === 'subscription' && registrySubscriptions) {
     // Subscriptions tab is a REGISTRY: show every active subscription,
     // regardless of which month is selected. Date column = next charge.
     items = state.subscriptions.map(sub => ({
@@ -1547,6 +1722,10 @@ function renderList() {
     items = getMonthItems(y, m);
     if (view === 'expense') {
       items = items.filter(i => i._kind === 'expense');
+    } else if (view === 'income') {
+      items = items.filter(i => i._kind === 'income' || i.type === 'income');
+    } else if (view === 'subscription') {
+      items = items.filter(i => i._kind === 'subscription' || i._kind === 'charge');
     }
   }
 
@@ -1573,6 +1752,29 @@ function renderList() {
     case 'category': items.sort((a,b) => (a.category||'').localeCompare(b.category||'')); break;
   }
 
+  return items;
+}
+
+function renderMainView() {
+  const list = document.getElementById('list');
+  const calendar = document.getElementById('calendarView');
+  const isCalendar = state.viewMode === 'calendar';
+  list.style.display = isCalendar ? 'none' : '';
+  calendar.classList.toggle('active', isCalendar);
+  document.querySelectorAll('.view-mode').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === state.viewMode);
+  });
+  if (isCalendar) renderCalendar();
+  else renderList();
+}
+
+function renderList() {
+  const { y, m } = state.viewMonth;
+  const view = state.settings.view;
+  const isSubView = view === 'subscription';
+  const isCurrentMonth = (y === currentYM().y && m === currentYM().m);
+  const items = getVisibleItems({ registrySubscriptions: true });
+
   const list = document.getElementById('list');
 
   if (items.length === 0) {
@@ -1593,6 +1795,88 @@ function renderList() {
 
   items.forEach(item => html += renderRow(item));
   list.innerHTML = html;
+}
+
+function renderCalendar() {
+  const { y, m } = state.viewMonth;
+  const grid = document.getElementById('calendarGrid');
+  const items = getVisibleItems({ registrySubscriptions: false });
+  const byDate = {};
+  items.forEach(item => {
+    if (!item._date || !isInMonth(item._date, y, m)) return;
+    if (!byDate[item._date]) byDate[item._date] = [];
+    byDate[item._date].push(item);
+  });
+
+  const first = new Date(y, m, 1);
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const leading = first.getDay();
+  const cellCount = Math.ceil((leading + daysInMonth) / 7) * 7;
+  const target = state.settings.displayCurrency;
+  const sym = currencySymbol(target);
+  let html = '';
+
+  for (let i = 0; i < cellCount; i++) {
+    const day = i - leading + 1;
+    if (day < 1 || day > daysInMonth) {
+      html += '<div class="calendar-day empty" aria-hidden="true"></div>';
+      continue;
+    }
+
+    const iso = fmtISO(new Date(y, m, day));
+    const dayItems = byDate[iso] || [];
+    const total = dayItems.reduce((sum, item) => {
+      const amount = convert(item._amount, item.currency || 'USD', target);
+      const isIncome = item._kind === 'income' || item.type === 'income';
+      return sum + (isIncome ? amount : -amount);
+    }, 0);
+    const hasTotal = dayItems.length > 0;
+    const totalClass = total > 0 ? 'positive' : total < 0 ? 'negative' : 'zero';
+    const totalLabel = total < 0 ? `-${sym}${formatMoney(Math.abs(total))}` : `${sym}${formatMoney(total)}`;
+    const itemLabel = `${dayItems.length} ${dayItems.length === 1 ? 'item' : 'items'}`;
+
+    html += `
+      <button class="calendar-day ${state.calendarOpenDate === iso ? 'open' : ''}" type="button" data-date="${iso}" data-has-items="${dayItems.length ? 'true' : 'false'}" aria-label="${monthShort(m)} ${day}, ${itemLabel}">
+        <span class="calendar-date">${day}</span>
+        ${dayItems.length ? `<span class="calendar-count">${dayItems.length}</span>` : ''}
+        ${hasTotal ? `<span class="calendar-total ${totalClass}">${totalLabel}</span>` : ''}
+      </button>`;
+  }
+
+  grid.innerHTML = html;
+  renderCalendarDetails(byDate[state.calendarOpenDate] || []);
+}
+
+function renderCalendarDetails(items) {
+  const details = document.getElementById('calendarDetails');
+  if (!state.calendarOpenDate || items.length === 0) {
+    details.classList.remove('open');
+    details.innerHTML = '';
+    return;
+  }
+  let html = `
+    <div class="calendar-details-head">
+      <div class="calendar-details-title">${formatPretty(state.calendarOpenDate)}</div>
+      <button class="calendar-close" type="button" id="calendarClose" aria-label="Close day details">×</button>
+    </div>
+    <div class="table-head">
+      <div></div>
+      <div>Item</div>
+      <div>Merchant / Platform</div>
+      <div>Category</div>
+      <div>Amount</div>
+      <div>Date</div>
+      <div></div>
+    </div>`;
+  items.forEach(item => html += renderRow(item));
+  details.innerHTML = html;
+  details.classList.add('open');
+}
+
+function closeCalendarDay() {
+  if (!state.calendarOpenDate) return;
+  state.calendarOpenDate = null;
+  renderCalendar();
 }
 
 function renderEmptyState({ view, isCurrentMonth, y, m }) {
@@ -1655,9 +1939,10 @@ function renderEmptyState({ view, isCurrentMonth, y, m }) {
 
 function switchTab(view) {
   state.settings.view = view;
+  state.calendarOpenDate = null;
   saveSettings();
   renderTabs();
-  renderList();
+  renderMainView();
 }
 
 function renderRow(item) {
@@ -2046,12 +2331,13 @@ function bindEvents() {
 
   document.getElementById('search').addEventListener('input', (e) => {
     state.search = e.target.value;
-    renderList();
+    state.calendarOpenDate = null;
+    renderMainView();
   });
   document.getElementById('sortBy').addEventListener('change', (e) => {
     state.settings.sort = e.target.value;
     saveSettings();
-    renderList();
+    renderMainView();
   });
   document.getElementById('sortBy').value = state.settings.sort;
 
@@ -2064,10 +2350,34 @@ function bindEvents() {
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => {
       state.settings.view = t.dataset.view;
+      state.calendarOpenDate = null;
       saveSettings();
       renderTabs();
-      renderList();
+      renderMainView();
     });
+  });
+  document.querySelectorAll('.view-mode').forEach(b => {
+    b.addEventListener('click', () => {
+      state.viewMode = b.dataset.mode;
+      state.calendarOpenDate = null;
+      renderMainView();
+    });
+  });
+  document.getElementById('calendarGrid').addEventListener('click', (e) => {
+    const day = e.target.closest('.calendar-day[data-date]');
+    if (!day) return;
+    e.stopPropagation();
+    state.calendarOpenDate = day.dataset.hasItems === 'true' ? day.dataset.date : null;
+    renderCalendar();
+  });
+  document.getElementById('calendarDetails').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (e.target.closest('#calendarClose')) closeCalendarDay();
+  });
+  document.addEventListener('click', (e) => {
+    if (state.viewMode !== 'calendar' || !state.calendarOpenDate) return;
+    if (e.target.closest('#calendarView')) return;
+    closeCalendarDay();
   });
   // restore tab from settings
   document.querySelectorAll('.tab').forEach(t => {
@@ -2078,6 +2388,7 @@ function bindEvents() {
     let { y, m } = state.viewMonth;
     m--; if (m < 0) { m = 11; y--; }
     state.viewMonth = { y, m };
+    state.calendarOpenDate = null;
     render();
   });
   document.getElementById('monthNext').addEventListener('click', () => {
@@ -2086,10 +2397,12 @@ function bindEvents() {
     if (y > cur.y || (y === cur.y && m >= cur.m)) return;
     m++; if (m > 11) { m = 0; y++; }
     state.viewMonth = { y, m };
+    state.calendarOpenDate = null;
     render();
   });
   document.getElementById('monthToday').addEventListener('click', () => {
     state.viewMonth = currentYM();
+    state.calendarOpenDate = null;
     render();
   });
 
@@ -2122,7 +2435,7 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeModal(); closeConfirm(); }
+    if (e.key === 'Escape') { closeCalendarDay(); closeModal(); closeConfirm(); }
     if ((e.metaKey || e.ctrlKey) && e.key === 'e') { e.preventDefault(); openAddExpense(); }
     if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openAddSub(); }
   });
