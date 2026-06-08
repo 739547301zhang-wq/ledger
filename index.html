@@ -2195,17 +2195,21 @@ function incomeBucketsForWeek(date) {
 
 function renderSourceOptions(selectedId, date) {
   const sel = document.getElementById('fSource');
-  const buckets = incomeBucketsForWeek(date);
+  const target = state.settings.displayCurrency;
+  // Show every income bucket, newest week first — not just the same week.
+  const buckets = state.incomes
+    .slice()
+    .sort((a, b) => (b.weekStartDate || '').localeCompare(a.weekStartDate || ''));
   let options = '<option value="">No bucket</option>';
   options += buckets.map(bucket => {
-    const target = state.settings.displayCurrency;
     const available = convert(bucket.availableAmount, bucket.currency || 'USD', target);
-    return `<option value="${escapeHtml(bucket.id)}">${escapeHtml(bucket.name)} · ${currencySymbol(target)}${formatMoney(available)} available</option>`;
+    const wk = bucket.weekStartDate ? ` · wk of ${formatPretty(bucket.weekStartDate)}` : '';
+    return `<option value="${escapeHtml(bucket.id)}">${escapeHtml(bucket.name)}${wk} · ${currencySymbol(target)}${formatMoney(available)} available</option>`;
   }).join('');
   sel.innerHTML = options;
   sel.value = selectedId && buckets.some(b => b.id === selectedId) ? selectedId : '';
   document.getElementById('sourceHint').textContent =
-    buckets.length ? 'Shows income buckets from the same week.' : 'No income buckets found for this week.';
+    buckets.length ? 'Pick any income bucket to fund this.' : 'No income buckets yet — add one with ＋ Income.';
 }
 
 /* ============================================================
