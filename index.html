@@ -975,6 +975,8 @@
       <button class="tab" data-view="income">Income <span class="count" id="countIncome">0</span></button>
       <button class="tab" data-view="expense">Expenses <span class="count" id="countExpense">0</span></button>
       <button class="tab" data-view="subscription">Subscriptions <span class="count" id="countSub">0</span></button>
+      <button class="tab" data-view="subcharged">Subs charged <span class="count" id="countSubCharged">0</span></button>
+      <button class="tab" data-view="spent">Spent <span class="count" id="countSpent">0</span></button>
     </div>
     <div class="view-toggle" id="viewToggle" aria-label="View mode">
       <button class="view-mode active" data-mode="list" type="button">List</button>
@@ -1851,6 +1853,11 @@ function renderTabs() {
   document.getElementById('countExpense').textContent = items.filter(i => i._kind === 'expense').length;
   // Subscriptions tab is a registry — count all active subs, not month-filtered.
   document.getElementById('countSub').textContent = state.subscriptions.length;
+  // Subs charged = subscription charges actually incurred this month.
+  document.getElementById('countSubCharged').textContent = items.filter(i => i._kind === 'charge').length;
+  // Spent = everything actually spent this month (expenses + subscription charges).
+  document.getElementById('countSpent').textContent =
+    items.filter(i => i._kind === 'expense' || i._kind === 'charge').length;
 
   document.querySelectorAll('.tab').forEach(t => {
     t.classList.toggle('active', t.dataset.view === state.settings.view);
@@ -1879,6 +1886,10 @@ function getVisibleItems({ registrySubscriptions = false } = {}) {
       items = items.filter(i => i._kind === 'income' || i.type === 'income');
     } else if (view === 'subscription') {
       items = items.filter(i => i._kind === 'subscription' || i._kind === 'charge');
+    } else if (view === 'subcharged') {
+      items = items.filter(i => i._kind === 'charge');
+    } else if (view === 'spent') {
+      items = items.filter(i => i._kind === 'expense' || i._kind === 'charge');
     }
   }
 
@@ -2070,6 +2081,36 @@ function renderEmptyState({ view, isCurrentMonth, y, m }) {
         <p>${isCurrentMonth
           ? 'Log a takeout, an Uber, or any one-time spend to start the month.'
           : 'You didn\u2019t record any one-time expenses for this month.'}</p>
+        ${isCurrentMonth ? `
+          <div class="empty-actions">
+            <button class="btn primary" onclick="openAddExpense()">＋ Add expense</button>
+          </div>` : ''}
+      </div>`;
+  }
+
+  if (view === 'subcharged') {
+    return `
+      <div class="empty">
+        <div class="ornament">§</div>
+        <h3>No subscription charges in ${monthStr}.</h3>
+        <p>${hasActiveSubs
+          ? 'None of your subscriptions have billed yet this month. Charges appear here automatically once their next-charge date passes.'
+          : 'Add a subscription and its charges will show up here each month once they bill.'}</p>
+        ${!hasActiveSubs ? `
+          <div class="empty-actions">
+            <button class="btn secondary" onclick="openAddSub()">＋ Add subscription</button>
+          </div>` : ''}
+      </div>`;
+  }
+
+  if (view === 'spent') {
+    return `
+      <div class="empty">
+        <div class="ornament">§</div>
+        <h3>Nothing spent in ${monthStr}.</h3>
+        <p>${isCurrentMonth
+          ? 'Expenses and subscription charges that actually hit this month will appear here.'
+          : 'You didn’t spend anything recorded for this month.'}</p>
         ${isCurrentMonth ? `
           <div class="empty-actions">
             <button class="btn primary" onclick="openAddExpense()">＋ Add expense</button>
