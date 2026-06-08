@@ -252,6 +252,53 @@
     letter-spacing: .04em;
   }
 
+  /* ---------- Spending breakdown popover ---------- */
+  .stat.has-pop { cursor: help; }
+  .stat.has-pop .stat-label::after {
+    content: '◔';
+    margin-left: 6px;
+    color: var(--ink-muted);
+    font-size: 11px;
+  }
+  .spend-pop {
+    position: fixed;
+    z-index: 300;
+    width: 330px;
+    max-width: calc(100vw - 24px);
+    background: var(--bg-elevated);
+    border: 1px solid var(--ink);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    display: none;
+  }
+  .spend-pop.show { display: block; }
+  .spend-pop-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 14px;
+  }
+  .spend-pop-body { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .donut-wrap { position: relative; width: 80px; height: 80px; flex: 0 0 auto; }
+  .donut { width: 80px; height: 80px; display: block; }
+  .donut circle { transition: stroke-dasharray .35s ease, stroke-dashoffset .35s ease; }
+  .donut-center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .donut-center .dc-val { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--ink); }
+  .donut-center .dc-lab { font-family: var(--mono); font-size: 8px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); margin-top: 2px; }
+  .spend-legend { flex: 1 1 150px; display: flex; flex-direction: column; gap: 9px; min-width: 150px; }
+  .legend-row { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 auto; }
+  .legend-name { color: var(--ink-soft); white-space: nowrap; }
+  .legend-pct { color: var(--ink-muted); font-size: 10px; }
+  .legend-val { margin-left: auto; color: var(--ink); font-weight: 500; white-space: nowrap; }
+
   /* ---------- Action bar ---------- */
   .action-bar {
     display: flex;
@@ -930,7 +977,7 @@
       <div class="stat-value"><span class="currency" id="curSym1">$</span><span id="statMonthTotal">0.00</span></div>
       <div class="stat-sub" id="statMonthSub">no activity</div>
     </div>
-    <div class="stat">
+    <div class="stat has-pop" id="statSpending" tabindex="0">
       <div class="stat-label">Spending</div>
       <div class="stat-value"><span class="currency" id="curSym2">$</span><span id="statSubMonthly">0.00</span></div>
       <div class="stat-sub" id="statSubSub">0 active</div>
@@ -944,6 +991,30 @@
       <div class="stat-label">Available money</div>
       <div class="stat-value"><span class="currency" id="curSym4">$</span><span id="statCategory">0.00</span></div>
       <div class="stat-sub" id="statCategorySub">no spending</div>
+    </div>
+  </div>
+
+  <!-- Spending breakdown popover (hover/tap the Spending stat) -->
+  <div class="spend-pop" id="spendingPopover" role="tooltip">
+    <div class="spend-pop-title">This month · where it goes</div>
+    <div class="spend-pop-body">
+      <div class="donut-wrap">
+        <svg class="donut" viewBox="0 0 42 42" aria-hidden="true">
+          <circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--rule-soft)" stroke-width="5"></circle>
+          <circle id="segExpense" cx="21" cy="21" r="15.915" fill="none" stroke="var(--green)" stroke-width="5" stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="butt"></circle>
+          <circle id="segSub" cx="21" cy="21" r="15.915" fill="none" stroke="var(--accent)" stroke-width="5" stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="butt"></circle>
+          <circle id="segAvail" cx="21" cy="21" r="15.915" fill="none" stroke="var(--blue)" stroke-width="5" stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="butt"></circle>
+        </svg>
+        <div class="donut-center">
+          <span class="dc-val" id="donutCenter">$0</span>
+          <span class="dc-lab">spent</span>
+        </div>
+      </div>
+      <div class="spend-legend">
+        <div class="legend-row"><span class="legend-dot" style="background:var(--green)"></span><span class="legend-name">Expenses</span><span class="legend-pct" id="pctExpense">0%</span><span class="legend-val" id="legendExpense">$0</span></div>
+        <div class="legend-row"><span class="legend-dot" style="background:var(--accent)"></span><span class="legend-name">Subs</span><span class="legend-pct" id="pctSub">0%</span><span class="legend-val" id="legendSub">$0</span></div>
+        <div class="legend-row"><span class="legend-dot" style="background:var(--blue)"></span><span class="legend-name">Available</span><span class="legend-pct" id="pctAvail">0%</span><span class="legend-val" id="legendAvail">$0</span></div>
+      </div>
     </div>
   </div>
 
@@ -975,8 +1046,6 @@
       <button class="tab" data-view="income">Income <span class="count" id="countIncome">0</span></button>
       <button class="tab" data-view="expense">Expenses <span class="count" id="countExpense">0</span></button>
       <button class="tab" data-view="subscription">Subscriptions <span class="count" id="countSub">0</span></button>
-      <button class="tab" data-view="subcharged">Subs charged <span class="count" id="countSubCharged">0</span></button>
-      <button class="tab" data-view="spent">Spent <span class="count" id="countSpent">0</span></button>
     </div>
     <div class="view-toggle" id="viewToggle" aria-label="View mode">
       <button class="view-mode active" data-mode="list" type="button">List</button>
@@ -1843,6 +1912,80 @@ function renderStats() {
     `${availableTotal < 0 ? '-' : ''}${formatMoney(Math.abs(availableTotal))}`;
   document.getElementById('statCategorySub').textContent =
     'remaining in month buckets';
+
+  // Keep the hover breakdown current if it's open.
+  if (document.getElementById('spendingPopover').classList.contains('show')) {
+    renderSpendingBreakdown();
+  }
+}
+
+/* ============================================================
+   SPENDING BREAKDOWN POPOVER (hover the Spending stat)
+   ============================================================ */
+function setDonutSegment(id, percent, precedingPercent) {
+  const el = document.getElementById(id);
+  const p = Math.max(0, Math.min(100, percent));
+  el.setAttribute('stroke-dasharray', `${p} ${100 - p}`);
+  let offset = ((25 - precedingPercent) % 100 + 100) % 100;
+  el.setAttribute('stroke-dashoffset', offset);
+}
+
+function renderSpendingBreakdown() {
+  const { y, m } = state.viewMonth;
+  const target = state.settings.displayCurrency;
+  const sym = currencySymbol(target);
+  const items = getMonthItems(y, m);
+
+  const expenseTotal = items
+    .filter(i => i._kind === 'expense')
+    .reduce((s, i) => s + convert(i._amount, i.currency || 'USD', target), 0);
+  const subTotal = items
+    .filter(i => i._kind === 'subscription' || i._kind === 'charge')
+    .reduce((s, i) => s + convert(i._amount, i.currency || 'USD', target), 0);
+  const availRaw = state.incomes
+    .filter(i => isInMonth(i.date, y, m))
+    .reduce((s, i) => s + convert(i.availableAmount, i.currency || 'USD', target), 0);
+  const availTotal = Math.max(0, availRaw);
+
+  const total = expenseTotal + subTotal + availTotal;
+  const pct = v => total > 0 ? (v / total) * 100 : 0;
+  const pe = pct(expenseTotal), ps = pct(subTotal), pa = pct(availTotal);
+
+  setDonutSegment('segExpense', pe, 0);
+  setDonutSegment('segSub', ps, pe);
+  setDonutSegment('segAvail', pa, pe + ps);
+
+  document.getElementById('donutCenter').textContent = sym + formatMoney(expenseTotal + subTotal);
+  document.getElementById('legendExpense').textContent = sym + formatMoney(expenseTotal);
+  document.getElementById('legendSub').textContent = sym + formatMoney(subTotal);
+  document.getElementById('legendAvail').textContent = `${availRaw < 0 ? '-' : ''}${sym}${formatMoney(Math.abs(availRaw))}`;
+  document.getElementById('pctExpense').textContent = Math.round(pe) + '%';
+  document.getElementById('pctSub').textContent = Math.round(ps) + '%';
+  document.getElementById('pctAvail').textContent = Math.round(pa) + '%';
+}
+
+let spendPinned = false;
+function positionSpendingPopover() {
+  const pop = document.getElementById('spendingPopover');
+  const card = document.getElementById('statSpending');
+  const r = card.getBoundingClientRect();
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let left = r.left;
+  let top = r.bottom + 8;
+  if (left + pw > window.innerWidth - 12) left = window.innerWidth - 12 - pw;
+  if (left < 12) left = 12;
+  if (top + ph > window.innerHeight - 12) top = Math.max(12, r.top - ph - 8);
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+}
+function showSpendingPopover() {
+  renderSpendingBreakdown();
+  document.getElementById('spendingPopover').classList.add('show');
+  positionSpendingPopover();
+}
+function hideSpendingPopover() {
+  if (spendPinned) return;
+  document.getElementById('spendingPopover').classList.remove('show');
 }
 
 function renderTabs() {
@@ -1853,11 +1996,6 @@ function renderTabs() {
   document.getElementById('countExpense').textContent = items.filter(i => i._kind === 'expense').length;
   // Subscriptions tab is a registry — count all active subs, not month-filtered.
   document.getElementById('countSub').textContent = state.subscriptions.length;
-  // Subs charged = subscription charges actually incurred this month.
-  document.getElementById('countSubCharged').textContent = items.filter(i => i._kind === 'charge').length;
-  // Spent = everything actually spent this month (expenses + subscription charges).
-  document.getElementById('countSpent').textContent =
-    items.filter(i => i._kind === 'expense' || i._kind === 'charge').length;
 
   document.querySelectorAll('.tab').forEach(t => {
     t.classList.toggle('active', t.dataset.view === state.settings.view);
@@ -1886,10 +2024,6 @@ function getVisibleItems({ registrySubscriptions = false } = {}) {
       items = items.filter(i => i._kind === 'income' || i.type === 'income');
     } else if (view === 'subscription') {
       items = items.filter(i => i._kind === 'subscription' || i._kind === 'charge');
-    } else if (view === 'subcharged') {
-      items = items.filter(i => i._kind === 'charge');
-    } else if (view === 'spent') {
-      items = items.filter(i => i._kind === 'expense' || i._kind === 'charge');
     }
   }
 
@@ -2081,36 +2215,6 @@ function renderEmptyState({ view, isCurrentMonth, y, m }) {
         <p>${isCurrentMonth
           ? 'Log a takeout, an Uber, or any one-time spend to start the month.'
           : 'You didn\u2019t record any one-time expenses for this month.'}</p>
-        ${isCurrentMonth ? `
-          <div class="empty-actions">
-            <button class="btn primary" onclick="openAddExpense()">＋ Add expense</button>
-          </div>` : ''}
-      </div>`;
-  }
-
-  if (view === 'subcharged') {
-    return `
-      <div class="empty">
-        <div class="ornament">§</div>
-        <h3>No subscription charges in ${monthStr}.</h3>
-        <p>${hasActiveSubs
-          ? 'None of your subscriptions have billed yet this month. Charges appear here automatically once their next-charge date passes.'
-          : 'Add a subscription and its charges will show up here each month once they bill.'}</p>
-        ${!hasActiveSubs ? `
-          <div class="empty-actions">
-            <button class="btn secondary" onclick="openAddSub()">＋ Add subscription</button>
-          </div>` : ''}
-      </div>`;
-  }
-
-  if (view === 'spent') {
-    return `
-      <div class="empty">
-        <div class="ornament">§</div>
-        <h3>Nothing spent in ${monthStr}.</h3>
-        <p>${isCurrentMonth
-          ? 'Expenses and subscription charges that actually hit this month will appear here.'
-          : 'You didn’t spend anything recorded for this month.'}</p>
         ${isCurrentMonth ? `
           <div class="empty-actions">
             <button class="btn primary" onclick="openAddExpense()">＋ Add expense</button>
@@ -2725,6 +2829,28 @@ function bindEvents() {
       state.calendarOpenDate = null;
       renderMainView();
     });
+  });
+
+  // Spending breakdown popover: hover on desktop, tap to pin on touch.
+  const spendingCard = document.getElementById('statSpending');
+  spendingCard.addEventListener('mouseenter', showSpendingPopover);
+  spendingCard.addEventListener('mouseleave', hideSpendingPopover);
+  spendingCard.addEventListener('focus', showSpendingPopover);
+  spendingCard.addEventListener('blur', hideSpendingPopover);
+  spendingCard.addEventListener('click', (e) => {
+    e.stopPropagation();
+    spendPinned = !spendPinned;
+    if (spendPinned) showSpendingPopover();
+    else document.getElementById('spendingPopover').classList.remove('show');
+  });
+  document.addEventListener('click', (e) => {
+    if (spendPinned && !e.target.closest('#statSpending') && !e.target.closest('#spendingPopover')) {
+      spendPinned = false;
+      document.getElementById('spendingPopover').classList.remove('show');
+    }
+  });
+  window.addEventListener('resize', () => {
+    if (document.getElementById('spendingPopover').classList.contains('show')) positionSpendingPopover();
   });
   document.getElementById('calendarGrid').addEventListener('click', (e) => {
     const day = e.target.closest('.calendar-day[data-date]');
