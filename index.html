@@ -1030,6 +1030,11 @@
     <div class="sub" id="modalSub">Record a one-time spend</div>
 
     <div class="form-grid" id="formGrid">
+      <div class="field full" id="fieldIncomeTarget" style="display:none;">
+        <label for="fIncomeTarget">Income source</label>
+        <select id="fIncomeTarget" class="field-select"></select>
+        <div class="hint" id="incomeTargetHint">Add to an existing bucket, or create a new one.</div>
+      </div>
       <div class="field full">
         <label for="fName">Title</label>
         <input type="text" id="fName" placeholder="e.g. Dinner at Joe's" autocomplete="off">
@@ -2231,6 +2236,45 @@ function renderSourceOptions(selectedId, date) {
     buckets.length ? 'Pick any income bucket to fund this.' : 'No income buckets yet — add one with ＋ Income.';
 }
 
+function renderIncomeTargetOptions() {
+  const sel = document.getElementById('fIncomeTarget');
+  const target = state.settings.displayCurrency;
+  const buckets = state.incomes
+    .slice()
+    .sort((a, b) => (b.weekStartDate || '').localeCompare(a.weekStartDate || ''));
+  let options = '<option value="">＋ New bucket</option>';
+  options += buckets.map(bucket => {
+    const total = convert(Number(bucket.amount) || 0, bucket.currency || 'USD', target);
+    const wk = bucket.weekStartDate ? ` · wk of ${formatPretty(bucket.weekStartDate)}` : '';
+    return `<option value="${escapeHtml(bucket.id)}">${escapeHtml(bucket.name)}${wk} · ${currencySymbol(target)}${formatMoney(total)} total</option>`;
+  }).join('');
+  sel.innerHTML = options;
+  sel.value = '';
+  document.getElementById('incomeTargetHint').textContent = 'Add to an existing bucket, or create a new one.';
+}
+
+// When an existing bucket is picked in the Add-Income flow, switch the form
+// into "top up" mode: lock the name to that bucket and add to its balance.
+function onIncomeTargetChange() {
+  if (!state.editing || state.editing.type !== 'income') return;
+  const targetId = document.getElementById('fIncomeTarget').value;
+  const nameInput = document.getElementById('fName');
+  const bucket = targetId ? state.incomes.find(b => b.id === targetId) : null;
+  if (bucket) {
+    nameInput.value = bucket.name || '';
+    nameInput.readOnly = true;
+    document.getElementById('fCurrency').value = bucket.currency || state.settings.displayCurrency;
+    document.getElementById('fDate').value = bucket.date || bucket.weekStartDate || todayISO();
+    document.getElementById('amountLabel').textContent = 'Amount to add';
+    document.getElementById('incomeTargetHint').textContent = 'Adds to this bucket’s balance.';
+  } else {
+    nameInput.readOnly = false;
+    nameInput.value = '';
+    document.getElementById('amountLabel').textContent = 'Original amount';
+    document.getElementById('incomeTargetHint').textContent = 'Add to an existing bucket, or create a new one.';
+  }
+}
+
 /* ============================================================
    MODAL: ADD / EDIT
    ============================================================ */
@@ -2262,6 +2306,12 @@ function openModal(type, id) {
   document.getElementById('fieldPlatform').style.display = isIncome ? 'none' : 'flex';
   document.getElementById('fieldCategory').style.display = isIncome ? 'none' : 'flex';
   document.getElementById('fieldTime').style.display = isIncome ? 'none' : 'flex';
+
+  // Add-income flow can target an existing bucket (top-up). Reset any prior lock.
+  const showIncomeTarget = isIncome && !id;
+  document.getElementById('fieldIncomeTarget').style.display = showIncomeTarget ? 'flex' : 'none';
+  document.getElementById('fName').readOnly = false;
+  if (showIncomeTarget) renderIncomeTargetOptions();
 
   document.getElementById('btnDelete').style.display = id ? 'inline-block' : 'none';
 
@@ -2334,15 +2384,26 @@ function saveItem() {
       saveIncomes();
       toast('Income updated');
     } else {
-      state.incomes.push({
-        id: 'inc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-        name, amount, availableAmount: amount, currency, date,
-        weekStartDate: weekStartISO(date), notes,
-        createdAt: new Date().toISOString(),
-      });
-      recalculateIncomeAvailability();
-      saveIncomes();
-      toast('Income added');
+      const targetId = document.getElementById('fIncomeTarget').value;
+      const targetBucket = targetId ? state.incomes.find(b => b.id === targetId) : null;
+      if (targetBucket) {
+        // Top up an existing bucket — add to its balance (in the bucket's currency).
+        const addAmt = convert(amount, currency, targetBucket.currency || 'USD');
+        targetBucket.amount = (Number(targetBucket.amount) || 0) + addAmt;
+        recalculateIncomeAvailability();
+        saveIncomes();
+        toast(`Added ${currencySymbol(targetBucket.currency || 'USD')}${formatMoney(addAmt)} to ${targetBucket.name}`);
+      } else {
+        state.incomes.push({
+          id: 'inc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+          name, amount, availableAmount: amount, currency, date,
+          weekStartDate: weekStartISO(date), notes,
+          createdAt: new Date().toISOString(),
+        });
+        recalculateIncomeAvailability();
+        saveIncomes();
+        toast('Income added');
+      }
     }
     const d = parseISO(date);
     if (d.getFullYear() !== state.viewMonth.y || d.getMonth() !== state.viewMonth.m) {
@@ -2587,6 +2648,8 @@ function bindEvents() {
     if (!state.editing || state.editing.type === 'income') return;
     renderSourceOptions(document.getElementById('fSource').value, document.getElementById('fDate').value);
   });
+
+  document.getElementById('fIncomeTarget').addEventListener('change', onIncomeTargetChange);
 
   document.getElementById('search').addEventListener('input', (e) => {
     state.search = e.target.value;
