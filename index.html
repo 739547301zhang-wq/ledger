@@ -1072,6 +1072,12 @@
         <div class="hint" id="dateHint">Date this expense occurred.</div>
       </div>
 
+      <div class="field full" id="fieldTime">
+        <label for="fTime">Time</label>
+        <input type="time" id="fTime" step="60">
+        <div class="hint">Time it was incurred (optional).</div>
+      </div>
+
       <div class="field full" id="fieldSource" style="display:none;">
         <label for="fSource">Paid from</label>
         <select id="fSource" class="field-select"></select>
@@ -1589,6 +1595,18 @@ function formatPretty(iso) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
+function nowHM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function formatTime(hm) {
+  if (!hm) return '';
+  const [h, m] = hm.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return '';
+  const ampm = h < 12 ? 'AM' : 'PM';
+  const hr = h % 12 === 0 ? 12 : h % 12;
+  return `${hr}:${String(m).padStart(2,'0')} ${ampm}`;
+}
 function monthName(m) {
   return ['January','February','March','April','May','June','July','August','September','October','November','December'][m];
 }
@@ -1622,6 +1640,7 @@ function autoAdvance() {
         amount: Number(sub.cost) || 0,
         currency: sub.currency || 'USD',
         date: sub.nextCharge,
+        time: sub.time || '',
         cycle: sub.cycle,
         sourceId: sub.sourceId || '',
       });
@@ -2143,7 +2162,7 @@ function renderRow(item) {
         ${(item.currency && item.currency !== target) ? `<span class="native">${currencySymbol(item.currency)}${formatMoney(item._amount)} ${item.currency}</span>` : ''}
       </div>
       <div class="col-date ${dInfo.dueSoon ? 'soon' : ''}">
-        ${formatPretty(item._date)}
+        ${formatPretty(item._date)}${item.time ? ` · ${formatTime(item.time)}` : ''}
         <span class="rel">${dInfo.label}</span>
       </div>
       <div class="col-actions">
@@ -2242,6 +2261,7 @@ function openModal(type, id) {
   document.getElementById('fieldSource').style.display = isIncome ? 'none' : 'flex';
   document.getElementById('fieldPlatform').style.display = isIncome ? 'none' : 'flex';
   document.getElementById('fieldCategory').style.display = isIncome ? 'none' : 'flex';
+  document.getElementById('fieldTime').style.display = isIncome ? 'none' : 'flex';
 
   document.getElementById('btnDelete').style.display = id ? 'inline-block' : 'none';
 
@@ -2260,6 +2280,7 @@ function openModal(type, id) {
     document.getElementById('fCurrency').value = item.currency || state.settings.displayCurrency;
     if (isSub) document.getElementById('fCycle').value = item.cycle || 'monthly';
     document.getElementById('fDate').value = isSub ? item.nextCharge : item.date;
+    document.getElementById('fTime').value = item.time || '';
     document.getElementById('fNotes').value = item.notes || '';
     if (!isIncome) renderSourceOptions(item.sourceId || '', isSub ? item.nextCharge : item.date);
   } else {
@@ -2270,6 +2291,7 @@ function openModal(type, id) {
     document.getElementById('fCurrency').value = state.settings.displayCurrency;
     document.getElementById('fCycle').value = 'monthly';
     document.getElementById('fDate').value = todayISO();
+    document.getElementById('fTime').value = isIncome ? '' : nowHM();
     document.getElementById('fNotes').value = '';
     if (!isIncome) renderSourceOptions('', todayISO());
   }
@@ -2296,6 +2318,7 @@ function saveItem() {
   const currency = document.getElementById('fCurrency').value;
   const cycle = document.getElementById('fCycle').value;
   const date = document.getElementById('fDate').value;
+  const time = isIncome ? '' : document.getElementById('fTime').value;
   const notes = document.getElementById('fNotes').value.trim();
   const sourceId = isIncome ? '' : document.getElementById('fSource').value;
 
@@ -2328,14 +2351,14 @@ function saveItem() {
   } else if (isSub) {
     if (id) {
       const sub = state.subscriptions.find(x => x.id === id);
-      Object.assign(sub, { name, platform, category, cost: amount, currency, cycle, nextCharge: date, sourceId, notes });
+      Object.assign(sub, { name, platform, category, cost: amount, currency, cycle, nextCharge: date, time, sourceId, notes });
       saveMoneyState();
       toast('Subscription updated');
     } else {
       state.subscriptions.push({
         id: 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
         name, platform, category, cost: amount, currency, cycle,
-        nextCharge: date, sourceId, notes,
+        nextCharge: date, time, sourceId, notes,
         createdAt: new Date().toISOString(),
       });
       saveMoneyState();
@@ -2351,11 +2374,11 @@ function saveItem() {
   } else {
     if (id) {
       const exp = state.expenses.find(x => x.id === id);
-      Object.assign(exp, { name, platform, category, amount, currency, date, sourceId, notes });
+      Object.assign(exp, { name, platform, category, amount, currency, date, time, sourceId, notes });
     } else {
       state.expenses.push({
         id: 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-        name, platform, category, amount, currency, date, sourceId, notes,
+        name, platform, category, amount, currency, date, time, sourceId, notes,
         createdAt: new Date().toISOString(),
       });
     }
