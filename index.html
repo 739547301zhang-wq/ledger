@@ -298,6 +298,16 @@
   .legend-name { color: var(--ink-soft); white-space: nowrap; }
   .legend-pct { color: var(--ink-muted); font-size: 10px; }
   .legend-val { margin-left: auto; color: var(--ink); font-weight: 500; white-space: nowrap; }
+  .legend-head .legend-name { color: var(--ink); font-weight: 600; }
+  #legendAvailBranches { display: flex; flex-direction: column; gap: 5px; margin-top: 5px; }
+  .branch-row {
+    display: flex; align-items: center; gap: 7px;
+    font-family: var(--mono); font-size: 10px; margin-left: 17px;
+  }
+  .branch-row .legend-dot { width: 8px; height: 8px; }
+  .branch-name { color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 96px; }
+  .branch-val { margin-left: auto; color: var(--ink-soft); white-space: nowrap; }
+  .branch-empty { margin-left: 17px; font-family: var(--mono); font-size: 10px; color: var(--ink-muted); }
 
   /* ---------- Action bar ---------- */
   .action-bar {
@@ -1003,7 +1013,7 @@
           <circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--rule-soft)" stroke-width="5"></circle>
           <circle id="segExpense" cx="21" cy="21" r="15.915" fill="none" stroke="var(--green)" stroke-width="5" stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="butt"></circle>
           <circle id="segSub" cx="21" cy="21" r="15.915" fill="none" stroke="var(--accent)" stroke-width="5" stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="butt"></circle>
-          <circle id="segAvail" cx="21" cy="21" r="15.915" fill="none" stroke="var(--blue)" stroke-width="5" stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="butt"></circle>
+          <g id="segAvailGroup"></g>
         </svg>
         <div class="donut-center">
           <span class="dc-val" id="donutCenter">$0</span>
@@ -1013,7 +1023,8 @@
       <div class="spend-legend">
         <div class="legend-row"><span class="legend-dot" style="background:var(--green)"></span><span class="legend-name">Expenses</span><span class="legend-pct" id="pctExpense">0%</span><span class="legend-val" id="legendExpense">$0</span></div>
         <div class="legend-row"><span class="legend-dot" style="background:var(--accent)"></span><span class="legend-name">Subs</span><span class="legend-pct" id="pctSub">0%</span><span class="legend-val" id="legendSub">$0</span></div>
-        <div class="legend-row"><span class="legend-dot" style="background:var(--blue)"></span><span class="legend-name">Available</span><span class="legend-pct" id="pctAvail">0%</span><span class="legend-val" id="legendAvail">$0</span></div>
+        <div class="legend-row legend-head"><span class="legend-dot" style="background:transparent"></span><span class="legend-name">Available</span><span class="legend-pct" id="pctAvail">0%</span><span class="legend-val" id="legendAvail">$0</span></div>
+        <div id="legendAvailBranches"></div>
       </div>
     </div>
   </div>
@@ -1916,24 +1927,34 @@ function renderStats() {
   // Keep the hover breakdown current if it's open.
   if (document.getElementById('spendingPopover').classList.contains('show')) {
     renderSpendingBreakdown();
+    positionSpendingPopover();
   }
 }
 
 /* ============================================================
    SPENDING BREAKDOWN POPOVER (hover the Spending stat)
    ============================================================ */
-function setDonutSegment(id, percent, precedingPercent) {
-  const el = document.getElementById(id);
+function applyDonutSeg(el, percent, precedingPercent) {
   const p = Math.max(0, Math.min(100, percent));
   el.setAttribute('stroke-dasharray', `${p} ${100 - p}`);
-  let offset = ((25 - precedingPercent) % 100 + 100) % 100;
-  el.setAttribute('stroke-dashoffset', offset);
+  el.setAttribute('stroke-dashoffset', ((25 - precedingPercent) % 100 + 100) % 100);
+}
+function setDonutSegment(id, percent, precedingPercent) {
+  applyDonutSeg(document.getElementById(id), percent, precedingPercent);
+}
+// A distinct color per income branch, kept in the blue→violet range so it
+// never clashes with the green (expenses) or red (subscriptions) wedges.
+function branchColor(i, n) {
+  if (n <= 1) return 'var(--blue)';
+  const hue = Math.round(198 + (i / (n - 1)) * 84);
+  return `hsl(${hue}, 48%, 46%)`;
 }
 
 function renderSpendingBreakdown() {
   const { y, m } = state.viewMonth;
   const target = state.settings.displayCurrency;
   const sym = currencySymbol(target);
+  const money = v => `${v < 0 ? '-' : ''}${sym}${formatMoney(Math.abs(v))}`;
   const items = getMonthItems(y, m);
 
   const expenseTotal = items
@@ -1942,10 +1963,21 @@ function renderSpendingBreakdown() {
   const subTotal = items
     .filter(i => i._kind === 'subscription' || i._kind === 'charge')
     .reduce((s, i) => s + convert(i._amount, i.currency || 'USD', target), 0);
-  const availRaw = state.incomes
+
+  // One branch per income bucket in this month.
+  const branches = state.incomes
     .filter(i => isInMonth(i.date, y, m))
-    .reduce((s, i) => s + convert(i.availableAmount, i.currency || 'USD', target), 0);
-  const availTotal = Math.max(0, availRaw);
+    .map(b => ({ name: b.name || 'Income', raw: convert(b.availableAmount, b.currency || 'USD', target) }));
+  const availRawTotal = branches.reduce((s, b) => s + b.raw, 0);
+  const availTotal = branches.reduce((s, b) => s + Math.max(0, b.raw), 0);
+
+  // Assign each branch a color (only positive ones get a colored arc).
+  const nDrawn = branches.filter(b => b.raw > 0).length;
+  let ci = 0;
+  branches.forEach(b => {
+    if (b.raw > 0) { b.color = branchColor(ci, Math.max(1, nDrawn)); ci++; }
+    else { b.color = 'var(--ink-muted)'; }
+  });
 
   const total = expenseTotal + subTotal + availTotal;
   const pct = v => total > 0 ? (v / total) * 100 : 0;
@@ -1953,15 +1985,41 @@ function renderSpendingBreakdown() {
 
   setDonutSegment('segExpense', pe, 0);
   setDonutSegment('segSub', ps, pe);
-  setDonutSegment('segAvail', pa, pe + ps);
+
+  // Draw the available wedge as one sub-arc per income bucket.
+  const group = document.getElementById('segAvailGroup');
+  group.innerHTML = '';
+  const NS = 'http://www.w3.org/2000/svg';
+  let preceding = pe + ps;
+  branches.forEach(b => {
+    if (b.raw <= 0) return;
+    const segP = pct(b.raw);
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', '21'); c.setAttribute('cy', '21'); c.setAttribute('r', '15.915');
+    c.setAttribute('fill', 'none'); c.setAttribute('stroke', b.color);
+    c.setAttribute('stroke-width', '5'); c.setAttribute('stroke-linecap', 'butt');
+    applyDonutSeg(c, segP, preceding);
+    group.appendChild(c);
+    preceding += segP;
+  });
 
   document.getElementById('donutCenter').textContent = sym + formatMoney(expenseTotal + subTotal);
   document.getElementById('legendExpense').textContent = sym + formatMoney(expenseTotal);
   document.getElementById('legendSub').textContent = sym + formatMoney(subTotal);
-  document.getElementById('legendAvail').textContent = `${availRaw < 0 ? '-' : ''}${sym}${formatMoney(Math.abs(availRaw))}`;
+  document.getElementById('legendAvail').textContent = money(availRawTotal);
   document.getElementById('pctExpense').textContent = Math.round(pe) + '%';
   document.getElementById('pctSub').textContent = Math.round(ps) + '%';
   document.getElementById('pctAvail').textContent = Math.round(pa) + '%';
+
+  const bl = document.getElementById('legendAvailBranches');
+  bl.innerHTML = branches.length
+    ? branches.map(b => `
+        <div class="branch-row">
+          <span class="legend-dot" style="background:${b.color}"></span>
+          <span class="branch-name">${escapeHtml(b.name)}</span>
+          <span class="branch-val">${money(b.raw)}</span>
+        </div>`).join('')
+    : `<div class="branch-empty">No income buckets this month</div>`;
 }
 
 let spendPinned = false;
